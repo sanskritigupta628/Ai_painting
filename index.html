@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InstantSketch AI | Real-Time Generation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .touch-none {
+            touch-action: none;
+        }
+
+        .canvas-box {
+            width: 100%;
+            max-width: 512px;
+            aspect-ratio: 1 / 1;
+            margin: 0 auto;
+        }
+
+        .glow-border {
+            box-shadow: 0 0 25px rgba(168, 85, 247, 0.2);
+        }
+
+        .color-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .color-btn:hover {
+            transform: scale(1.15);
+        }
+
+        .color-btn.active {
+            border-color: white;
+            outline: 2px solid #a855f7;
+        }
+
+        .tool-btn.active {
+            background-color: #a855f7;
+            color: white;
+            border-color: #a855f7;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen bg-neutral-950 text-white font-sans flex flex-col items-center">
+
+    <header class="w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur-md sticky top-0 z-20">
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-900/40">
+                    <i data-lucide="zap" class="w-6 h-6 text-white"></i>
+                </div>
+                <span class="font-bold text-xl tracking-tight">Instant<span class="text-purple-400">Sketch</span></span>
+            </div>
+
+            <div id="status-badge"
+                class="flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold border bg-red-500/10 border-red-500/20 text-red-400 transition-all duration-500">
+                <div class="w-2 h-2 rounded-full bg-current animate-pulse"></div>
+                <span id="status-text">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 w-full max-w-6xl mx-auto px-4 py-8 flex flex-col gap-6">
+
+        <div class="bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-xl">
+            <div class="flex flex-col lg:flex-row justify-between items-center gap-6">
+
+                <div class="flex items-center gap-5 flex-wrap justify-center">
+                    <div class="flex items-center gap-2 bg-neutral-800 p-2 rounded-xl border border-neutral-700">
+                        <button class="color-btn active" style="background-color: #000000;"
+                            onclick="setColor('#000000', this)"></button>
+                        <button class="color-btn" style="background-color: #ef4444;"
+                            onclick="setColor('#ef4444', this)"></button>
+                        <button class="color-btn" style="background-color: #3b82f6;"
+                            onclick="setColor('#3b82f6', this)"></button>
+                        <button class="color-btn" style="background-color: #22c55e;"
+                            onclick="setColor('#22c55e', this)"></button>
+                        <button class="color-btn" style="background-color: #eab308;"
+                            onclick="setColor('#eab308', this)"></button>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button id="eraser-btn"
+                            class="tool-btn p-2.5 bg-neutral-800 hover:bg-neutral-700 rounded-xl border border-neutral-700 transition-all"
+                            title="Eraser">
+                            <i data-lucide="eraser" class="w-5 h-5"></i>
+                        </button>
+                        <button id="clear-btn"
+                            class="p-2.5 bg-neutral-800 hover:bg-red-500/20 hover:text-red-400 rounded-xl border border-neutral-700 transition-all"
+                            title="Clear All">
+                            <i data-lucide="trash-2" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-3 bg-neutral-800 px-4 py-2 rounded-xl border border-neutral-700">
+                        <i data-lucide="brush" class="w-4 h-4 text-neutral-400"></i>
+                        <input type="range" id="brush-size" min="2" max="50" value="6"
+                            class="w-24 h-1.5 bg-neutral-600 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                    </div>
+                </div>
+
+                <div class="relative w-full lg:w-1/3">
+                    <input type="text" id="prompt-input"
+                        class="w-full bg-neutral-950 border-2 border-neutral-800 rounded-xl px-5 py-3 text-sm focus:outline-none focus:border-purple-500 transition-all placeholder-neutral-600"
+                        placeholder="What should this become? (e.g. 'a lush mountain')">
+                    <i data-lucide="wand-2" class="absolute right-4 top-3.5 w-5 h-5 text-neutral-700"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div class="flex flex-col gap-3">
+                <h3 class="text-neutral-500 text-xs font-black uppercase tracking-[0.2em] ml-1">Your Sketch</h3>
+                <div
+                    class="canvas-box relative bg-white rounded-2xl overflow-hidden shadow-2xl border-4 border-neutral-900">
+                    <canvas id="sketch-canvas" class="w-full h-full touch-none cursor-crosshair"></canvas>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-3">
+                <h3 class="text-neutral-500 text-xs font-black uppercase tracking-[0.2em] ml-1">AI Vision</h3>
+                <div id="output-container"
+                    class="canvas-box relative bg-neutral-900 rounded-2xl overflow-hidden border-4 border-neutral-900 flex items-center justify-center glow-border">
+                    <img id="generated-image" class="w-full h-full object-cover hidden" alt="AI Generated" />
+
+                    <div id="placeholder-content" class="text-center p-10">
+                        <div id="spinner"
+                            class="w-12 h-12 border-4 border-neutral-800 border-t-purple-500 rounded-full animate-spin mx-auto mb-4 hidden">
+                        </div>
+                        <i data-lucide="image" class="w-16 h-16 text-neutral-800 mx-auto mb-4"></i>
+                        <p class="text-neutral-500 text-sm font-medium">Draw something to begin...</p>
+                    </div>
+
+                    <button id="save-btn"
+                        class="hidden absolute bottom-4 right-4 p-3 bg-black/70 backdrop-blur-md rounded-xl text-white hover:bg-purple-600 border border-white/10 transition-all shadow-xl">
+                        <i data-lucide="download" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const CANVAS_SIZE = 512;
+        let socket = null;
+        let isDrawing = false;
+        let debounceTimer = null;
+        let currentColor = '#000000';
+        let lastColor = '#000000';
+
+        const canvas = document.getElementById('sketch-canvas');
+        const ctx = canvas.getContext('2d');
+
+        const els = {
+            prompt: document.getElementById('prompt-input'),
+            eraser: document.getElementById('eraser-btn'),
+            clear: document.getElementById('clear-btn'),
+            save: document.getElementById('save-btn'),
+            brush: document.getElementById('brush-size'),
+            statusBadge: document.getElementById('status-badge'),
+            statusText: document.getElementById('status-text'),
+            outputImg: document.getElementById('generated-image'),
+            placeholder: document.getElementById('placeholder-content'),
+            spinner: document.getElementById('spinner')
+        };
+
+        function initCanvas() {
+            canvas.width = CANVAS_SIZE;
+            canvas.height = CANVAS_SIZE;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+            ctx.strokeStyle = currentColor;
+            ctx.lineWidth = els.brush.value;
+        }
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host || 'localhost:8000';
+            socket = new WebSocket(`${protocol}//${host}/ws`);
+
+            socket.onopen = () => {
+                els.statusBadge.className = "flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold border bg-green-500/10 border-green-500/20 text-green-400";
+                els.statusText.innerText = "Live Support Connected";
+            };
+
+            socket.onclose = () => {
+                els.statusBadge.className = "flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold border bg-red-500/10 border-red-500/20 text-red-400";
+                els.statusText.innerText = "Offline - Retrying...";
+                setTimeout(connect, 3000);
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'result') {
+                    els.outputImg.src = data.image;
+                    els.outputImg.classList.remove('hidden');
+                    els.placeholder.classList.add('hidden');
+                    els.spinner.classList.add('hidden');
+                    els.save.classList.remove('hidden');
+                }
+            };
+        }
+
+        function sendData() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+            // Show spinner on first major draw
+            if (els.outputImg.classList.contains('hidden')) {
+                els.spinner.classList.remove('hidden');
+            }
+
+            socket.send(JSON.stringify({
+                type: "stroke",
+                prompt: els.prompt.value || "highly detailed masterpiece",
+                image: canvas.toDataURL("image/png")
+            }));
+        }
+
+        // Color & Tool Logic
+        window.setColor = (color, btn) => {
+            currentColor = color;
+            lastColor = color;
+            ctx.strokeStyle = color;
+            els.eraser.classList.remove('active');
+            document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+        };
+
+        els.eraser.onclick = () => {
+            currentColor = "white";
+            ctx.strokeStyle = "white";
+            document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+            els.eraser.classList.add('active');
+        };
+
+        els.clear.onclick = () => {
+            if (confirm("Clear your masterpiece?")) {
+                ctx.fillStyle = "white";
+                ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+                sendData();
+            }
+        };
+
+        // Draw Events
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            ctx.beginPath();
+            const pos = getPos(e);
+            ctx.moveTo(pos.x, pos.y);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const pos = getPos(e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDrawing) {
+                isDrawing = false;
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(sendData, 450); // Small delay to catch full stroke
+            }
+        });
+
+        // Prompt update
+        els.prompt.oninput = () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(sendData, 800);
+        };
+
+        els.brush.oninput = (e) => ctx.lineWidth = e.target.value;
+
+        els.save.onclick = () => {
+            const link = document.createElement('a');
+            link.download = `ai-sketch-${Date.now()}.png`;
+            link.href = els.outputImg.src;
+            link.click();
+        };
+
+        window.onload = () => {
+            initCanvas();
+            connect();
+            lucide.createIcons();
+        };
+    </script>
+</body>
+
+</html
